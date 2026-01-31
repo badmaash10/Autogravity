@@ -1,0 +1,15 @@
+# Secrets
+.env
+config.json
+utils/credentials.json
+utils/token.pickle
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.pytest_cache/
+
+# Bridge artifacts
+anchors/
+outbox/

@@ -1,0 +1,16 @@
+discord.py>=2.3.0
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pyautogui>=0.9.54
+Pillow>=10.0.0
+pyscreeze>=0.1.30
+opencv-python>=4.8.0
+pygetwindow>=0.0.9
+watchdog>=4.0.0
+pyperclip>=1.8.2
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=1.1.0
+python-dotenv>=1.0.0
+SpeechRecognition>=3.10.0
+pydub>=0.25.1
