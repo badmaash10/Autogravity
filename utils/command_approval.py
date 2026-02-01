@@ -17,11 +17,18 @@ import pyautogui
 import discord
 
 
-# Anchor image for the approval dialog
+# Anchor images for permission dialogs
 ANCHORS_PATH = Path(__file__).parent.parent / "anchors"
+
+# File access approval (existing)
 APPROVAL_DIALOG_ANCHOR = ANCHORS_PATH / "approval_dialog.png"
 APPROVE_BUTTON_ANCHOR = ANCHORS_PATH / "approve_button.png"
 REJECT_BUTTON_ANCHOR = ANCHORS_PATH / "reject_button.png"
+
+# CLI command execution approval (new)
+CLI_COMMAND_ANCHOR = ANCHORS_PATH / "cli_command_dialog.png"
+CLI_APPROVE_BUTTON_ANCHOR = ANCHORS_PATH / "cli_approve_button.png"
+CLI_REJECT_BUTTON_ANCHOR = ANCHORS_PATH / "cli_reject_button.png"
 
 
 class CommandApprovalWatcher:
@@ -35,14 +42,14 @@ class CommandApprovalWatcher:
         self.pending_approval = False
         self.last_screenshot_path = None
         self.watching = False
+        self.dialog_type = None  # 'file_access' or 'cli_command'
     
     def detect_approval_dialog(self) -> bool:
         """
-        Check if an approval dialog is visible on screen.
+        Check if a file access approval dialog is visible on screen.
         Returns True if found.
         """
         if not APPROVAL_DIALOG_ANCHOR.exists():
-            # Silently return False if not calibrated
             return False
         
         try:
@@ -51,21 +58,57 @@ class CommandApprovalWatcher:
                 confidence=0.7,
                 grayscale=True
             )
-            return location is not None
+            if location is not None:
+                self.dialog_type = 'file_access'
+                return True
+            return False
         except Exception:
-            # Silently fail - image matching can fail for many reasons
             return False
     
+    def detect_cli_command_dialog(self) -> bool:
+        """
+        Check if a CLI command execution dialog is visible on screen.
+        Returns True if found.
+        """
+        if not CLI_COMMAND_ANCHOR.exists():
+            return False
+        
+        try:
+            location = pyautogui.locateOnScreen(
+                str(CLI_COMMAND_ANCHOR),
+                confidence=0.7,
+                grayscale=True
+            )
+            if location is not None:
+                self.dialog_type = 'cli_command'
+                return True
+            return False
+        except Exception:
+            return False
+    
+    def detect_any_dialog(self) -> bool:
+        """
+        Check for any type of approval dialog.
+        Returns True if any dialog is found.
+        """
+        return self.detect_approval_dialog() or self.detect_cli_command_dialog()
+    
     def click_approve(self) -> bool:
-        """Click the approve button."""
-        if not APPROVE_BUTTON_ANCHOR.exists():
+        """Click the approve button based on dialog type."""
+        # Select appropriate anchor based on dialog type
+        if self.dialog_type == 'cli_command':
+            anchor = CLI_APPROVE_BUTTON_ANCHOR
+        else:
+            anchor = APPROVE_BUTTON_ANCHOR
+        
+        if not anchor.exists():
             # Fallback: press Enter (often approves)
             pyautogui.press("enter")
             return True
         
         try:
             location = pyautogui.locateOnScreen(
-                str(APPROVE_BUTTON_ANCHOR),
+                str(anchor),
                 confidence=0.8
             )
             if location:
@@ -80,15 +123,21 @@ class CommandApprovalWatcher:
         return True
     
     def click_reject(self) -> bool:
-        """Click the reject button."""
-        if not REJECT_BUTTON_ANCHOR.exists():
+        """Click the reject button based on dialog type."""
+        # Select appropriate anchor based on dialog type
+        if self.dialog_type == 'cli_command':
+            anchor = CLI_REJECT_BUTTON_ANCHOR
+        else:
+            anchor = REJECT_BUTTON_ANCHOR
+        
+        if not anchor.exists():
             # Fallback: press Escape
             pyautogui.press("escape")
             return True
         
         try:
             location = pyautogui.locateOnScreen(
-                str(REJECT_BUTTON_ANCHOR),
+                str(anchor),
                 confidence=0.8
             )
             if location:
@@ -115,9 +164,17 @@ class CommandApprovalWatcher:
             screenshot.save(str(screenshot_path))
             self.last_screenshot_path = screenshot_path
             
+            # Different messages for different dialog types
+            if self.dialog_type == 'cli_command':
+                title = "⚡ **CLI Command Execution Request!**"
+                description = "A terminal command is waiting for approval."
+            else:
+                title = "📁 **File Access Request!**"
+                description = "A file operation is waiting for approval."
+            
             await channel.send(
-                "🔐 **Command Approval Required!**\n"
-                "A command is waiting for approval. Reply with:\n"
+                f"{title}\n"
+                f"{description} Reply with:\n"
                 "• `!approve` or `!yes` - to approve\n"
                 "• `!reject` or `!no` - to reject",
                 file=discord.File(screenshot_path)
@@ -150,24 +207,24 @@ class CommandApprovalWatcher:
                 pass
 
 
-def calibrate_approval_dialog():
-    """Interactive calibration for approval dialog detection."""
+def calibrate_file_access_dialog():
+    """Interactive calibration for file access approval dialog detection."""
     print("\n" + "=" * 50)
-    print("  APPROVAL DIALOG CALIBRATION")
+    print("  FILE ACCESS APPROVAL CALIBRATION")
     print("=" * 50)
     print("""
-This will capture reference images for detecting command approval dialogs.
+This will capture reference images for detecting FILE ACCESS dialogs.
 
-You need to trigger a command that requires approval first, then:
-1. Capture the approval dialog area
+You need to trigger a file operation that requires approval first, then:
+1. Capture the file access dialog area
 2. Capture the approve button
 3. Capture the reject button
 
-Press ENTER when you have an approval dialog visible...
+Press ENTER when you have a FILE ACCESS dialog visible...
 """)
     input()
     
-    print("\n[Step 1/3] Capturing APPROVAL DIALOG area...")
+    print("\n[Step 1/3] Capturing FILE ACCESS DIALOG area...")
     print("Move mouse to TOP-LEFT of the dialog, you have 3 seconds...")
     time.sleep(3)
     top_left = pyautogui.position()
@@ -208,8 +265,79 @@ Press ENTER when you have an approval dialog visible...
     screenshot.save(str(REJECT_BUTTON_ANCHOR))
     print(f"✅ Saved: {REJECT_BUTTON_ANCHOR}")
     
-    print("\n✅ Calibration complete! The bridge can now detect approval dialogs.")
+    print("\n✅ File access calibration complete!")
+
+
+# Alias for backwards compatibility
+def calibrate_approval_dialog():
+    """Alias for calibrate_file_access_dialog (backwards compatibility)."""
+    calibrate_file_access_dialog()
+
+
+def calibrate_cli_command_dialog():
+    """Interactive calibration for CLI command execution dialog detection."""
+    print("\n" + "=" * 50)
+    print("  CLI COMMAND EXECUTION CALIBRATION")
+    print("=" * 50)
+    print("""
+This will capture reference images for detecting CLI COMMAND dialogs.
+
+You need to trigger a terminal command that requires approval first, then:
+1. Capture the CLI command dialog area
+2. Capture the approve button
+3. Capture the reject button
+
+Press ENTER when you have a CLI COMMAND dialog visible...
+""")
+    input()
+    
+    print("\n[Step 1/3] Capturing CLI COMMAND DIALOG area...")
+    print("Move mouse to TOP-LEFT of the dialog, you have 3 seconds...")
+    time.sleep(3)
+    top_left = pyautogui.position()
+    print(f"Top-left: {top_left}")
+    
+    print("Move mouse to BOTTOM-RIGHT of the dialog, you have 3 seconds...")
+    time.sleep(3)
+    bottom_right = pyautogui.position()
+    print(f"Bottom-right: {bottom_right}")
+    
+    # Capture dialog
+    left = min(top_left[0], bottom_right[0])
+    top = min(top_left[1], bottom_right[1])
+    width = abs(bottom_right[0] - top_left[0])
+    height = abs(bottom_right[1] - top_left[1])
+    
+    if width > 10 and height > 10:
+        screenshot = pyautogui.screenshot(region=(left, top, width, height))
+        screenshot.save(str(CLI_COMMAND_ANCHOR))
+        print(f"✅ Saved: {CLI_COMMAND_ANCHOR}")
+    
+    print("\n[Step 2/3] Capturing APPROVE BUTTON (Run Command)...")
+    print("Move mouse to the approve/run button, you have 3 seconds...")
+    time.sleep(3)
+    btn_pos = pyautogui.position()
+    
+    screenshot = pyautogui.screenshot(region=(btn_pos[0]-30, btn_pos[1]-10, 60, 20))
+    screenshot.save(str(CLI_APPROVE_BUTTON_ANCHOR))
+    print(f"✅ Saved: {CLI_APPROVE_BUTTON_ANCHOR}")
+    
+    print("\n[Step 3/3] Capturing REJECT BUTTON (Cancel)...")
+    print("Move mouse to the reject/cancel button, you have 3 seconds...")
+    time.sleep(3)
+    btn_pos = pyautogui.position()
+    
+    screenshot = pyautogui.screenshot(region=(btn_pos[0]-30, btn_pos[1]-10, 60, 20))
+    screenshot.save(str(CLI_REJECT_BUTTON_ANCHOR))
+    print(f"✅ Saved: {CLI_REJECT_BUTTON_ANCHOR}")
+    
+    print("\n✅ CLI command calibration complete!")
 
 
 if __name__ == "__main__":
-    calibrate_approval_dialog()
+    import sys
+    if "--cli" in sys.argv:
+        calibrate_cli_command_dialog()
+    else:
+        calibrate_file_access_dialog()
+

@@ -1,6 +1,6 @@
 # AntiGravity Discord Bridge
 
-A bridge that connects Discord to the AntiGravity Agent running in your IDE.
+A bridge that connects Discord to the AntiGravity Agent running in your AntiGravity IDE.
 
 ## How It Works
 

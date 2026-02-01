@@ -1,0 +1,28 @@
+{
+    "projects": [
+        {
+            "name": "autogravity",
+            "path": "d:\\autogravity",
+            "description": "Discord Bridge"
+        },
+        {
+            "name": "what-to-do-ai",
+            "path": "d:\\what-to-do-ai",
+            "description": "AI Project"
+        },
+        {
+            "name": "portfolio",
+            "path": "d:\\portfolio_website",
+            "description": "Portfolio Site"
+        },
+        {
+            "name": "dashpilot",
+            "path": "d:\\CODING\\DashPilot",
+            "description": "Dashboard Project"
+        }
+    ],
+    "scan_dirs": [
+        "d:\\",
+        "d:\\CODING"
+    ]
+}

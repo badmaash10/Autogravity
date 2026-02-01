@@ -13,6 +13,12 @@ This file documents all available Discord bot commands and CLI options.
 | `!model <num>` | Switch to model by number | `!model 3` |
 | `!approve` / `!yes` | Approve a pending CLI command | `!approve` |
 | `!reject` / `!no` | Reject a pending CLI command | `!reject` |
+| `!max [title]` | Maximize a window | `!max AntiGravity` |
+| `!min [title]` | Minimize a window | `!min Chrome` |
+| `!focus [title]` | Focus a window | `!focus Discord` |
+| `!restore [title]` | Restore a minimized window | `!restore` |
+| `!windows` | List all open windows | `!windows` |
+| `!project <path>` | Open a project in AntiGravity | `!project d:\what-to-do-ai` |
 
 ## CLI Options
 

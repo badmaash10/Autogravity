@@ -472,6 +472,119 @@ async def screenshot_command(ctx):
         await ctx.send(f"❌ Screenshot failed: {e}")
 
 
+# ----- Window Control Commands -----
+from utils.windows_control import (
+    maximize_window, minimize_window, focus_window,
+    restore_window, list_open_windows, open_project
+)
+
+
+@bot.command(name="max")
+async def max_command(ctx, *, window_title: str = "AntiGravity"):
+    """Maximize a window by title."""
+    if maximize_window(window_title):
+        await ctx.send(f"✅ Maximized: `{window_title}`")
+    else:
+        await ctx.send(f"❌ Window not found: `{window_title}`")
+
+
+@bot.command(name="min")
+async def min_command(ctx, *, window_title: str = "AntiGravity"):
+    """Minimize a window by title."""
+    if minimize_window(window_title):
+        await ctx.send(f"✅ Minimized: `{window_title}`")
+    else:
+        await ctx.send(f"❌ Window not found: `{window_title}`")
+
+
+@bot.command(name="focus")
+async def focus_command(ctx, *, window_title: str = "AntiGravity"):
+    """Bring a window to the foreground."""
+    if focus_window(window_title):
+        await ctx.send(f"✅ Focused: `{window_title}`")
+    else:
+        await ctx.send(f"❌ Window not found: `{window_title}`")
+
+
+@bot.command(name="restore")
+async def restore_command(ctx, *, window_title: str = "AntiGravity"):
+    """Restore a minimized window."""
+    if restore_window(window_title):
+        await ctx.send(f"✅ Restored: `{window_title}`")
+    else:
+        await ctx.send(f"❌ Window not found: `{window_title}`")
+
+
+@bot.command(name="windows")
+async def windows_command(ctx):
+    """List all open windows."""
+    windows = list_open_windows()
+    
+    if not windows:
+        await ctx.send("No visible windows found.")
+        return
+    
+    lines = ["**Open Windows:**"]
+    for title, is_max, is_min in windows[:15]:  # Limit to 15
+        state = "🔲" if is_max else ("➖" if is_min else "🪟")
+        lines.append(f"{state} `{title[:50]}`")
+    
+    await ctx.send("\n".join(lines))
+
+
+@bot.command(name="project")
+async def project_command(ctx, *, query: str = None):
+    """Open a project in AntiGravity by number or name search."""
+    import json
+    
+    # Load projects from config
+    projects_file = Path(__file__).parent / "projects.json"
+    if not projects_file.exists():
+        await ctx.send("❌ No `projects.json` found. Please create it first.")
+        return
+    
+    with open(projects_file) as f:
+        config = json.load(f)
+    
+    projects = config.get("projects", [])
+    
+    if not query:
+        # Show numbered list
+        lines = ["**📂 Available Projects:**\n"]
+        for i, proj in enumerate(projects, 1):
+            lines.append(f"`{i}.` **{proj['name']}** - {proj.get('description', '')}")
+            lines.append(f"    `{proj['path']}`\n")
+        lines.append("\n**Usage:** `!project <number>` or `!project <name>`")
+        await ctx.send("\n".join(lines))
+        return
+    
+    # Try to match by number
+    selected = None
+    if query.isdigit():
+        idx = int(query) - 1
+        if 0 <= idx < len(projects):
+            selected = projects[idx]
+    
+    # Try to match by name (fuzzy)
+    if not selected:
+        query_lower = query.lower()
+        for proj in projects:
+            if query_lower in proj['name'].lower():
+                selected = proj
+                break
+    
+    if not selected:
+        await ctx.send(f"❌ Project not found: `{query}`\nUse `!project` to see available projects.")
+        return
+    
+    await ctx.send(f"📂 Opening: **{selected['name']}**\n`{selected['path']}`...")
+    
+    if open_project(selected['path']):
+        await ctx.send(f"✅ Project opened!")
+    else:
+        await ctx.send(f"❌ Failed to open project. Check if path exists.")
+
+
 # Model selector anchor
 MODEL_SELECTOR_ANCHOR = ANCHORS_PATH / "model_selector.png"
 
@@ -599,7 +712,8 @@ async def check_for_approval_dialogs():
         return
     
     if not approval_watcher.pending_approval:
-        if approval_watcher.detect_approval_dialog():
+        # Check for any type of approval dialog (file access or CLI command)
+        if approval_watcher.detect_any_dialog():
             await approval_watcher.take_screenshot_and_notify()
 
 
@@ -613,8 +727,13 @@ def main():
         return
     
     if "--calibrate-approval" in sys.argv:
-        from utils.command_approval import calibrate_approval_dialog
-        calibrate_approval_dialog()
+        from utils.command_approval import calibrate_file_access_dialog
+        calibrate_file_access_dialog()
+        return
+    
+    if "--calibrate-cli" in sys.argv:
+        from utils.command_approval import calibrate_cli_command_dialog
+        calibrate_cli_command_dialog()
         return
     
     if "--calibrate-model" in sys.argv:
@@ -679,11 +798,17 @@ Instructions:
         print(f"  ⚠️ Chat Anchor: NOT SET (run with --calibrate)")
     
     # Show approval anchor status
-    from utils.command_approval import APPROVAL_DIALOG_ANCHOR
+    from utils.command_approval import APPROVAL_DIALOG_ANCHOR, CLI_COMMAND_ANCHOR
     if APPROVAL_DIALOG_ANCHOR.exists():
-        print(f"  ✅ Approval Anchor: {APPROVAL_DIALOG_ANCHOR.name}")
+        print(f"  ✅ File Access Anchor: {APPROVAL_DIALOG_ANCHOR.name}")
     else:
-        print(f"  ⚠️ Approval Anchor: NOT SET (run with --calibrate-approval)")
+        print(f"  ⚠️ File Access Anchor: NOT SET (run with --calibrate-approval)")
+    
+    # Show CLI command anchor status
+    if CLI_COMMAND_ANCHOR.exists():
+        print(f"  ✅ CLI Command Anchor: {CLI_COMMAND_ANCHOR.name}")
+    else:
+        print(f"  ⚠️ CLI Command Anchor: NOT SET (run with --calibrate-cli)")
     
     print("=" * 50)
 
