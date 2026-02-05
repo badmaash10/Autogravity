@@ -11,5 +11,4 @@ venv/
 .pytest_cache/
 
 # Bridge artifacts
-anchors/
 outbox/

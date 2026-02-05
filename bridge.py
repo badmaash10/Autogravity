@@ -430,6 +430,17 @@ async def on_message(message: discord.Message):
         success = paste_to_ide(text_to_paste.strip())
         if success:
             await message.add_reaction("✅")
+            
+            # Start auto-recording if enabled
+            if auto_recording_enabled:
+                global auto_recorder
+                try:
+                    auto_recorder = get_auto_recorder(OUTBOX_PATH)
+                    auto_recorder.on_complete = on_auto_recording_complete
+                    auto_recorder.start()
+                    await message.channel.send("🔴 Recording response...")
+                except Exception as e:
+                    print(f"[WARN] Auto-recording failed to start: {e}")
         else:
             await message.add_reaction("❌")
             await message.channel.send("⚠️ Failed to paste to IDE. Is the window open?")
@@ -470,6 +481,255 @@ async def screenshot_command(ctx):
         
     except Exception as e:
         await ctx.send(f"❌ Screenshot failed: {e}")
+
+
+# ----- Screen Recording -----
+from utils.screen_recorder import get_recorder, ScreenRecorder
+from utils.auto_recorder import get_auto_recorder, AutoRecorder
+
+# Global recorders
+screen_recorder: ScreenRecorder = None
+auto_recorder: AutoRecorder = None
+auto_recording_enabled = True  # Enable/disable auto-recording
+
+
+@bot.command(name="record")
+async def record_command(ctx, duration: int = 30):
+    """
+    Start recording the right half of the screen (chat area).
+    Usage: !record [duration_seconds] - default is 30 seconds
+    """
+    global screen_recorder
+    
+    try:
+        if screen_recorder and screen_recorder.recording:
+            await ctx.send("⚠️ Already recording! Use `!stoprecord` to stop.")
+            return
+        
+        screen_recorder = get_recorder(OUTBOX_PATH)
+        
+        await ctx.send(f"🔴 Recording started for {duration}s... (right half of screen)")
+        
+        output_path = screen_recorder.start_recording(duration=duration, region="right")
+        
+        # Wait for recording to finish
+        await asyncio.sleep(duration + 1)
+        
+        # Recording auto-stopped, send the file
+        if output_path and output_path.exists():
+            await ctx.send("📹 Recording complete:", file=discord.File(output_path))
+            await asyncio.sleep(1)
+            try:
+                output_path.unlink()
+            except Exception:
+                pass
+        else:
+            await ctx.send("❌ Recording file not found")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Recording failed: {e}")
+
+
+@bot.command(name="stoprecord")
+async def stoprecord_command(ctx):
+    """Stop the current recording and send the video."""
+    global screen_recorder
+    
+    try:
+        if not screen_recorder or not screen_recorder.recording:
+            await ctx.send("⚠️ Not currently recording.")
+            return
+        
+        await ctx.send("⏹️ Stopping recording...")
+        
+        output_path = screen_recorder.stop_recording()
+        await asyncio.sleep(1)
+        
+        if output_path and output_path.exists():
+            await ctx.send("📹 Recording:", file=discord.File(output_path))
+            await asyncio.sleep(1)
+            try:
+                output_path.unlink()
+            except Exception:
+                pass
+        else:
+            await ctx.send("❌ Recording file not found")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Stop recording failed: {e}")
+
+
+# Pending video to send (set by auto_recorder callback)
+pending_video_path = None
+
+
+async def send_pending_video():
+    """Send pending auto-recorded video to Discord."""
+    global pending_video_path
+    
+    if pending_video_path and pending_video_path.exists():
+        channel = bot.get_channel(DISCORD_CHANNEL_ID)
+        if channel:
+            await channel.send("📹 **Response Recording:**", file=discord.File(pending_video_path))
+            await asyncio.sleep(1)
+            try:
+                pending_video_path.unlink()
+            except Exception:
+                pass
+        pending_video_path = None
+
+
+def on_auto_recording_complete(video_path):
+    """Callback when auto-recording completes."""
+    global pending_video_path
+    pending_video_path = video_path
+    
+    # Schedule sending the video
+    asyncio.run_coroutine_threadsafe(send_pending_video(), bot.loop)
+
+
+@bot.command(name="autorecord")
+async def autorecord_command(ctx, state: str = None):
+    """
+    Toggle auto-recording on/off.
+    Usage: !autorecord on/off or just !autorecord to see status
+    """
+    global auto_recording_enabled
+    
+    if state is None:
+        status = "ON ✅" if auto_recording_enabled else "OFF ❌"
+        await ctx.send(f"🎥 Auto-recording is currently: **{status}**")
+        return
+    
+    if state.lower() in ("on", "true", "1", "enable"):
+        auto_recording_enabled = True
+        await ctx.send("✅ Auto-recording **enabled**. Responses will be recorded automatically!")
+    elif state.lower() in ("off", "false", "0", "disable"):
+        auto_recording_enabled = False
+        await ctx.send("❌ Auto-recording **disabled**.")
+    else:
+        await ctx.send("Usage: `!autorecord on` or `!autorecord off`")
+
+
+@bot.command(name="fullshot")
+async def fullshot_command(ctx, pages: int = 3):
+    """
+    Capture full chat by scrolling and taking multiple screenshots.
+    Usage: !fullshot [pages] - default is 3 pages
+    """
+    try:
+        await ctx.send(f"📸 Capturing {pages} pages of chat...")
+        
+        # Focus IDE window first
+        if not find_and_focus_ide_window():
+            await ctx.send("❌ IDE window not found")
+            return
+        
+        time.sleep(0.5)
+        
+        # Click on chat area (using anchor)
+        chat_x, chat_y = None, None
+        if CHAT_INPUT_ANCHOR.exists():
+            location = pyautogui.locateOnScreen(
+                str(CHAT_INPUT_ANCHOR), confidence=0.7, grayscale=True
+            )
+            if location:
+                center = pyautogui.center(location)
+                chat_x, chat_y = center.x, center.y - 200
+                pyautogui.click(chat_x, chat_y)
+                time.sleep(0.3)
+        
+        # Scroll to bottom first using mouse wheel
+        if chat_x and chat_y:
+            pyautogui.moveTo(chat_x, chat_y)
+            pyautogui.scroll(-20)  # Scroll down to bottom
+            time.sleep(0.5)
+        
+        screenshots = []
+        timestamp = datetime.now().strftime('%H%M%S')
+        
+        for i in range(pages):
+            # Take screenshot
+            screenshot = pyautogui.screenshot()
+            screenshot_path = OUTBOX_PATH / f"fullshot_{timestamp}_{i}.png"
+            screenshot.save(str(screenshot_path))
+            screenshots.append(screenshot_path)
+            
+            if i < pages - 1:
+                # Scroll up using mouse wheel (more reliable than pageup)
+                if chat_x and chat_y:
+                    pyautogui.moveTo(chat_x, chat_y)
+                    pyautogui.scroll(10)  # Scroll up
+                time.sleep(0.6)
+        
+        # Send all screenshots (oldest first for reading order)
+        screenshots.reverse()
+        
+        for i, path in enumerate(screenshots):
+            await ctx.send(
+                f"📄 Page {i+1}/{pages}:",
+                file=discord.File(path)
+            )
+            await asyncio.sleep(0.5)  # Wait for Discord to finish with file
+        
+        # Clean up files after all sent
+        await asyncio.sleep(1)
+        for path in screenshots:
+            try:
+                path.unlink()
+            except Exception:
+                pass  # Ignore cleanup errors
+        
+        await ctx.send("✅ Full chat captured!")
+        
+    except Exception as e:
+        await ctx.send(f"❌ Fullshot failed: {e}")
+
+
+@bot.command(name="scroll")
+async def scroll_command(ctx, direction: str = "up", amount: int = 3):
+    """
+    Scroll the chat and take a screenshot.
+    Usage: !scroll up 5 or !scroll down 2
+    """
+    try:
+        if not find_and_focus_ide_window():
+            await ctx.send("❌ IDE window not found")
+            return
+        
+        time.sleep(0.3)
+        
+        # Click on chat area
+        if CHAT_INPUT_ANCHOR.exists():
+            location = pyautogui.locateOnScreen(
+                str(CHAT_INPUT_ANCHOR), confidence=0.7, grayscale=True
+            )
+            if location:
+                center = pyautogui.center(location)
+                pyautogui.click(center.x, center.y - 200)
+                time.sleep(0.2)
+        
+        # Scroll
+        key = "pageup" if direction.lower() == "up" else "pagedown"
+        for _ in range(amount):
+            pyautogui.press(key)
+            time.sleep(0.2)
+        
+        time.sleep(0.3)
+        
+        # Screenshot
+        screenshot = pyautogui.screenshot()
+        screenshot_path = OUTBOX_PATH / f"scroll_{datetime.now().strftime('%H%M%S')}.png"
+        screenshot.save(str(screenshot_path))
+        
+        await ctx.send(
+            f"📸 After scrolling {direction} {amount}x:",
+            file=discord.File(screenshot_path)
+        )
+        screenshot_path.unlink()
+        
+    except Exception as e:
+        await ctx.send(f"❌ Scroll failed: {e}")
 
 
 # ----- Window Control Commands -----
@@ -782,6 +1042,78 @@ Instructions:
         screenshot = pyautogui.screenshot(region=(pos[0]-20, pos[1]-20, 40, 40))
         screenshot.save(str(SEND_BUTTON_ANCHOR))
         print(f"\n✅ Send button anchor saved to: {SEND_BUTTON_ANCHOR}")
+        return
+    
+    # Calibration for auto-recording anchors
+    FILES_PANEL_CLOSE_ANCHOR = ANCHORS_PATH / "files_panel_close.png"
+    RESPONSE_COMPLETE_ANCHOR = ANCHORS_PATH / "response_complete.png"
+    
+    if "--calibrate-files-panel" in sys.argv:
+        print("\n" + "=" * 50)
+        print("  FILES PANEL CALIBRATION (Header + Offset)")
+        print("=" * 50)
+        print("""
+Step 1: Capture the static HEADER text ("Files with changes").
+Instructions:
+1. Make sure "Files with changes" panel is OPEN
+2. Move mouse to the text "Files with changes" (the static header)
+3. Press ENTER...
+""")
+        input()
+        print("Capturing header anchor in 3 seconds...")
+        time.sleep(3)
+        header_pos = pyautogui.position()
+        
+        # Capture header anchor
+        screenshot = pyautogui.screenshot(region=(header_pos[0]-50, header_pos[1]-15, 100, 30))
+        screenshot.save(str(FILES_PANEL_CLOSE_ANCHOR))
+        print(f"✅ Header anchor saved.")
+        
+        print("""
+Step 2: Define the Close Button Offset.
+Instructions:
+1. Move mouse to the CLOSE/BACK button of the panel
+2. Press ENTER to save the relative position...
+""")
+        input()
+        button_pos = pyautogui.position()
+        
+        # Calculate offset: button - header
+        offset_x = button_pos[0] - header_pos[0]
+        offset_y = button_pos[1] - header_pos[1]
+        
+        # Save offset to a text file next to the image
+        offset_file = ANCHORS_PATH / "files_panel_offset.txt"
+        with open(offset_file, "w") as f:
+            f.write(f"{offset_x},{offset_y}")
+            
+        print(f"✅ Offset saved: ({offset_x}, {offset_y})")
+        print(f"✅ Calibration complete!")
+        return
+    
+    if "--calibrate-response-complete" in sys.argv:
+        print("\n" + "=" * 50)
+        print("  RESPONSE COMPLETE INDICATOR CALIBRATION")
+        print("=" * 50)
+        print("""
+This will capture the thumbs up/down rating icons that appear
+at the end of each agent response.
+
+Instructions:
+1. Wait for an agent response to complete
+2. Position mouse over the THUMBS UP icon
+3. Press ENTER when ready...
+""")
+        input()
+        
+        print("Move mouse to the THUMBS UP/DOWN ICONS, you have 3 seconds...")
+        time.sleep(3)
+        pos = pyautogui.position()
+        
+        # Capture a wider region to get both icons
+        screenshot = pyautogui.screenshot(region=(pos[0]-40, pos[1]-15, 80, 30))
+        screenshot.save(str(RESPONSE_COMPLETE_ANCHOR))
+        print(f"\n✅ Response complete anchor saved to: {RESPONSE_COMPLETE_ANCHOR}")
         return
     
     print("=" * 50)

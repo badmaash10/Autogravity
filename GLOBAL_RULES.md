@@ -1,22 +1,21 @@
-# Discord Bridge Protocol
+# Discord Bridge - Remote Control
 
-When responding to user messages, always mirror your responses to the Discord bridge by writing to:
-`d:\autogravity\outbox\`
+The user controls you remotely via Discord. Focus on executing their requests.
 
-## How to Mirror
-Create a text file in the outbox folder with your response:
-```
-d:\autogravity\outbox\response_[topic].txt
-```
-
-## Available Discord Commands
-The user may send these commands via Discord:
-- `!screenshot` - Take a screenshot
-- `!model <num>` - Switch LLM model (1-7)
+## Available Commands (sent via Discord)
+- `!screenshot` - Shows current screen in Discord
+- `!windows` - List open windows
+- `!max` / `!min` / `!focus` - Window control
+- `!project` - Open a project
+- `!model <num>` - Switch LLM model
 - `!approve` / `!reject` - Handle command approval
-- `!docs <file> <title>` - Upload to Google Docs
+
+## How It Works
+1. User sends message via Discord → Message pasted to your chat
+2. You respond in chat as normal
+3. User uses `!screenshot` to see your response if needed
 
 ## Important
-- The user is controlling you remotely via Discord
-- Always write responses to the outbox so they appear in Discord
-- Use descriptive filenames for your outbox responses
+- Do NOT manually create response files in outbox
+- Focus on the actual task, not mirroring
+- The outbox is only for the bridge system, not for you to write to

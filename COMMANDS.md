@@ -9,6 +9,11 @@ This file documents all available Discord bot commands and CLI options.
 | `!ping` | Simple connectivity test | `!ping` |
 | `!status` | Check bridge status | `!status` |
 | `!screenshot` | Take a screenshot of the desktop | `!screenshot` |
+| `!record [seconds]` | Record right half of screen | `!record 30` |
+| `!stoprecord` | Stop recording and send video | `!stoprecord` |
+| `!autorecord [on/off]` | Toggle auto-recording | `!autorecord on` |
+| `!fullshot [pages]` | Capture full chat (scrolls & takes multiple screenshots) | `!fullshot 5` |
+| `!scroll <up/down> [amount]` | Scroll chat and screenshot | `!scroll up 3` |
 | `!model` | Show available models | `!model` |
 | `!model <num>` | Switch to model by number | `!model 3` |
 | `!approve` / `!yes` | Approve a pending CLI command | `!approve` |
@@ -36,6 +41,8 @@ Run these from the project directory with the virtual environment activated:
 | `python bridge.py --calibrate-send` | Calibrate send button (arrow icon) |
 | `python bridge.py --calibrate-model` | Calibrate model selector anchor |
 | `python bridge.py --calibrate-approval` | Calibrate command approval dialog |
+| `python bridge.py --calibrate-files-panel` | Calibrate "Files with changes" close button |
+| `python bridge.py --calibrate-response-complete` | Calibrate response rating icons (👍👎) |
 | `uvicorn server:app --reload` | Run with hot-reload (recommended) |
 
 ## Model Selection
